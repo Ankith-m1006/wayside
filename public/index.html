@@ -163,6 +163,7 @@ svg.i { width: 20px; height: 20px; flex: none; }
       <div class="walk-head"><span class="dot"></span><b>Walk in progress</b><button class="btn soft sm" id="endWalk" type="button" style="margin-left:auto">End walk</button></div>
       <div class="walk"><div><b id="wTime">0:00</b><span>outside</span></div><div><b id="wDist">0.0</b><span>km walked</span></div><div><b id="wFinds">0</b><span>finds</span></div></div>
     </div>
+    <div class="card hidden" id="goCard" style="display:flex;gap:12px;align-items:center"></div>
     <button class="btn leaf block" id="startWalk" type="button" style="margin-bottom:12px"><svg class="i" viewBox="0 0 24 24"><path class="st" d="M13 4a2 2 0 1 0 0-.1M7 21l3-6 3 2v4M10 15l-1-5 4-2 3 3 3 1M9 10l-3 2v3"/></svg>Start a walk</button>
 
     <div class="label">Today's quest <button class="more" id="newQuest" type="button">New quest</button></div>
@@ -204,7 +205,14 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const ls = { get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
 const month = () => new Date().toLocaleDateString("en-GB", { month: "long" });
-const region = () => ls.get("region", "Karnataka, India");
+// Region drives local names and seasonal quests. Wayside works anywhere: on first open it
+// suggests a region from the phone's time zone, or from location at state/country level.
+const TZ_REGION = { "Asia/Kolkata": "India", "Asia/Calcutta": "India", "America/New_York": "New York, USA", "America/Chicago": "Illinois, USA", "America/Denver": "Colorado, USA", "America/Los_Angeles": "California, USA", "America/Toronto": "Ontario, Canada", "America/Vancouver": "British Columbia, Canada", "America/Mexico_City": "Mexico", "America/Sao_Paulo": "São Paulo, Brazil", "Europe/London": "England, UK", "Europe/Paris": "France", "Europe/Berlin": "Germany", "Europe/Madrid": "Spain", "Europe/Rome": "Italy", "Europe/Amsterdam": "Netherlands", "Africa/Lagos": "Nigeria", "Africa/Nairobi": "Kenya", "Asia/Dubai": "United Arab Emirates", "Asia/Singapore": "Singapore", "Asia/Tokyo": "Japan", "Asia/Manila": "Philippines", "Asia/Jakarta": "Indonesia", "Asia/Dhaka": "Bangladesh", "Asia/Karachi": "Pakistan", "Asia/Colombo": "Sri Lanka", "Asia/Kathmandu": "Nepal", "Australia/Sydney": "New South Wales, Australia" };
+function guessRegion() {
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  return TZ_REGION[tz] || tz.split("/").pop()?.replace(/_/g, " ") || "";
+}
+const region = () => ls.get("region", null) || guessRegion() || "India";
 function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add("show"); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove("show"), 2200); }
 
 // ---------- Storage: finds (with photos) live in IndexedDB on the phone ----------
@@ -239,6 +247,7 @@ function renderWalk() {
   $("walkCard").classList.toggle("hidden", !on);
   $("startWalk").classList.toggle("hidden", on);
   $("intro").classList.toggle("hidden", on);
+  if (on) $("goCard").classList.add("hidden");
   if (!on) return;
   $("wTime").textContent = fmtMin(Date.now() - walk.startedAt);
   $("wDist").textContent = km(walk.track).toFixed(2);
@@ -288,9 +297,11 @@ $("endWalk").addEventListener("click", async () => {
   const outside = Math.max(0, 1 - screen / total);
   openSheet(`<div style="padding-top:6px"><div class="muted">Walk complete</div><h2 style="margin:2px 0 4px;font-size:25px;letter-spacing:-0.03em">${esc(questTitle() || "Nice walk")}</h2>
     <div class="summary"><div><b>${fmtMin(total)}</b><span>outside</span></div><div><b>${km(done.track).toFixed(2)} km</b><span>walked</span></div><div><b>${finds.length}</b><span>things spotted</span></div><div><b>${Math.round(outside * 100)}%</b><span>of the walk with the screen off</span></div></div>
-    <div class="muted">Screen on ${fmtMin(screen)} of ${fmtMin(total)}</div><div class="ratio"><i style="width:${Math.max(1, Math.round((screen / total) * 100))}%"></i></div>
+    <div class="box dyk" id="journalBox"><h4>Your walk, in words</h4><div class="thinking" style="padding:4px 0"><span class="spin"></span>Gemma is writing your nature journal…</div></div>
+    <div class="muted" style="margin-top:12px">Screen on ${fmtMin(screen)} of ${fmtMin(total)}</div><div class="ratio"><i style="width:${Math.max(1, Math.round((screen / total) * 100))}%"></i></div>
     ${finds.length ? `<div class="finds" style="margin-top:14px">${finds.map(findTile).join("")}</div>` : ""}
     <div class="row" style="display:flex;gap:8px;margin-top:16px"><button class="btn leaf" type="button" id="cardBtn" style="flex:1">Share walk card</button><button class="btn soft" type="button" data-close style="flex:1">Done</button></div></div>`);
+  writeJournal(done, finds, total);
   $("cardBtn").onclick = async () => {
     const cv = await walkCard(done, finds, total, screen);
     const name = `wayside-walk-${new Date(done.startedAt).toISOString().slice(0, 10)}.png`;
@@ -302,6 +313,24 @@ $("endWalk").addEventListener("click", async () => {
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; a.click(); toast("Walk card saved");
   };
 });
+
+// ---------- Nature journal: Gemma writes up the walk from what was actually found ----------
+async function writeJournal(w, finds, total) {
+  const box = () => $("journalBox");
+  const names = finds.map((f) => (f.result?.common_name ? `${f.result.common_name}${localName(f) ? ` (${localName(f).name})` : ""}` : null)).filter(Boolean);
+  if (!navigator.onLine) { if (box()) box().innerHTML = `<h4>Your walk, in words</h4><span class="muted">Gemma will write this when you are back in range.</span>`; return; }
+  try {
+    const r = await fetch("/api/journal", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ region: region(), month: month(), minutes: total / 60000, km: km(w.track), finds: names }) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error);
+    const walks = ls.get("walks", []), last = walks.find((x) => x.id === w.id);
+    if (last) { last.journal = j; ls.set("walks", walks); }
+    if (box()) {
+      box().innerHTML = `<h4>${esc(j.title || "Your walk, in words")}</h4><p style="margin:0 0 8px">${esc(j.entry)}</p><button class="btn soft sm" type="button" id="copyJournal">Copy</button>`;
+      $("copyJournal").onclick = () => navigator.clipboard?.writeText([j.title, "", j.entry].join("\n")).then(() => toast("Copied"));
+    }
+  } catch { if (box()) box().innerHTML = `<h4>Your walk, in words</h4><span class="muted">Couldn't write it just now.</span>`; }
+}
 
 // ---------- Walk card: a picture of the walk to share (stats, route, finds) ----------
 const loadImg = (src) => new Promise((res) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
@@ -384,8 +413,8 @@ $("questCard").addEventListener("click", (e) => {
 $("newQuest").addEventListener("click", () => loadQuest(true));
 
 // ---------- Snap → identify (queued when there's no signal) ----------
-$("shoot").addEventListener("click", () => $("cam").click());
-$("pick").addEventListener("click", () => $("gallery").click());
+$("shoot").addEventListener("click", () => { unlockAudio(); $("cam").click(); });
+$("pick").addEventListener("click", () => { unlockAudio(); $("gallery").click(); });
 for (const id of ["cam", "gallery"]) $(id).addEventListener("change", async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) await addFind(f); });
 
 async function shrink(file, max = 1024, q = 0.82) {
@@ -415,6 +444,7 @@ async function identify(f) {
     autoTickQuest(j);
     // A short buzz so the phone can stay in the pocket while Gemma works.
     try { navigator.vibrate?.([80, 60, 80]); } catch {}
+    if (speechOn()) speakFind(f);
     if (openId !== f.id && j.common_name) toast(`Found: ${j.common_name}`);
   } catch (e) { f.status = navigator.onLine ? "error" : "queued"; f.error = e.message; }
   await putFind(f); renderLists(); if (openId === f.id) showFind(f);
@@ -431,6 +461,78 @@ function autoTickQuest(r) {
   const hit = quest.quests.find((q) => !q.done && (name.split(/\s+/).some((w) => w.length > 3 && q.find.toLowerCase().includes(w))));
   if (hit) { hit.done = true; ls.set("quest", quest); renderQuest(); toast(`Quest ticked: ${hit.find}`); }
 }
+
+// ---------- Speaking results aloud, so the phone can stay in the pocket ----------
+// Uses the device's own text-to-speech (Android Google TTS, Apple voices on iPhone and Mac,
+// Windows voices) through the Web Speech API. If the device has no voice for the local
+// language, that part is fetched from the server's Cloud Text-to-Speech fallback.
+const LANG_CODE = { kannada: "kn-IN", hindi: "hi-IN", tamil: "ta-IN", telugu: "te-IN", malayalam: "ml-IN", marathi: "mr-IN", bengali: "bn-IN", gujarati: "gu-IN", punjabi: "pa-IN", odia: "or-IN", urdu: "ur-IN", spanish: "es-ES", french: "fr-FR", german: "de-DE", italian: "it-IT", portuguese: "pt-BR", japanese: "ja-JP", swahili: "sw-KE", indonesian: "id-ID", filipino: "fil-PH", dutch: "nl-NL" };
+const speechOn = () => ls.get("speak", true);
+const synth = "speechSynthesis" in window ? window.speechSynthesis : null;
+let audioUnlocked = false;
+const player = new Audio();
+function unlockAudio() {
+  // iPhone and iPad only allow speech after a tap, so the first tap primes both paths.
+  if (audioUnlocked) return;
+  audioUnlocked = true;
+  try { synth?.speak(new SpeechSynthesisUtterance(" ")); } catch {}
+  player.src = silentWav();
+  player.play().catch(() => {});
+}
+// A 0.1 s silent WAV, built in code, used only to unlock audio playback on iOS.
+function silentWav() {
+  const n = 800, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+  const w = (o, str) => [...str].forEach((c, k) => v.setUint8(o + k, c.charCodeAt(0)));
+  w(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); w(8, "WAVEfmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, 8000, true); v.setUint32(28, 16000, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, "data"); v.setUint32(40, n * 2, true);
+  return URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
+}
+function voiceFor(lang) {
+  const vs = synth?.getVoices() || [];
+  const base = lang.split("-")[0];
+  return vs.find((v) => v.lang === lang) || vs.find((v) => v.lang?.toLowerCase().startsWith(base));
+}
+function sayDevice(text, lang) {
+  return new Promise((res) => {
+    if (!synth) return res(false);
+    const v = voiceFor(lang);
+    if (!v && !lang.startsWith("en")) return res(false);
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = lang; if (v) u.voice = v; u.rate = 0.95;
+    u.onend = () => res(true); u.onerror = () => res(false);
+    synth.speak(u);
+  });
+}
+async function sayCloud(text, lang) {
+  if (!navigator.onLine) return false;
+  try {
+    const r = await fetch("/api/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, lang }) });
+    if (!r.ok) return false;
+    player.src = URL.createObjectURL(await r.blob());
+    await player.play();
+    await new Promise((res) => { player.onended = res; player.onerror = res; });
+    return true;
+  } catch { return false; }
+}
+async function say(text, lang) { return (await sayDevice(text, lang)) || (await sayCloud(text, lang)); }
+let speaking = false;
+async function speakFind(f) {
+  const r = f.result;
+  if (!r || speaking) return;
+  speaking = true;
+  synth?.cancel();
+  try {
+    const conf = Math.round((r.confidence ?? 0) * 100);
+    if (!r.common_name || r.subject === "none") { await say("I couldn't see anything clear in that photo. Try again a little closer.", "en-IN"); return; }
+    await say(`That looks like ${r.common_name}. I'm ${conf} percent sure.`, "en-IN");
+    const ln = localName(f), code = LANG_CODE[String(r.local_language || "").toLowerCase()];
+    if (ln && code) { await say(`In ${r.local_language}, people call it`, "en-IN"); await say(ln.name, code); }
+    if ((r.look_closer || []).length) await say(`Look closer: ${r.look_closer.join(". Then, ")}`, "en-IN");
+    if (r.safety?.note) await say(r.safety.note, "en-IN");
+    if (r.next_quest) await say(`Next, look for ${r.next_quest.replace(/^look for /i, "")}`, "en-IN");
+  } finally { speaking = false; }
+}
+synth?.addEventListener?.("voiceschanged", () => {});
 
 // ---------- Find detail ----------
 // Local names: shown only when Gemma is very sure. Otherwise the walker asks someone nearby
@@ -459,6 +561,7 @@ function showFind(f) {
       ${r.did_you_know ? `<div class="box dyk"><h4>Did you know</h4>${esc(r.did_you_know)}</div>` : ""}
       ${safety.note ? `<div class="box safe"><span class="pill ${safety.level === "danger" ? "bad" : safety.level === "caution" ? "warn" : "good"}" style="height:fit-content">${esc(safety.level || "note")}</span><span>${esc(safety.note)}</span></div>` : ""}
       ${r.next_quest ? `<div class="box nextq"><h4>Next, look for</h4><b>${esc(r.next_quest)}</b></div>` : ""}
+      <button class="btn soft block" type="button" data-say="${f.id}" style="margin-top:12px">Read it aloud</button>
       <p class="muted" style="margin:12px 2px 0">Identified by ${esc(r.model || "Gemma")} in ${((r.ms || 0) / 1000).toFixed(0)} s. Always double-check before touching or eating anything wild.</p>`;
   }
   body += `<button class="btn leaf block" type="button" data-close style="margin-top:14px">Back to the walk</button>`;
@@ -466,6 +569,8 @@ function showFind(f) {
 }
 $("sheet").addEventListener("click", async (e) => {
   if (e.target.closest("[data-close]")) return closeSheet();
+  const sayBtn = e.target.closest("[data-say]");
+  if (sayBtn) { unlockAudio(); const f = (await allFinds()).find((x) => x.id === sayBtn.dataset.say); if (f) speakFind(f); return; }
   const ask = e.target.closest("[data-askfor]");
   if (ask) {
     const name = $("askName")?.value.trim();
@@ -528,18 +633,69 @@ function setTab(t) {
 }
 $("tabs").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) setTab(b.dataset.tab); });
 
-// ---------- Settings ----------
-$("settingsBtn").addEventListener("click", () => {
-  openSheet(`<h2 style="margin:6px 0 12px;font-size:22px">Settings</h2>
-    <label class="field"><span>Your region</span><input id="regionIn" value="${esc(region())}" placeholder="e.g. Karnataka, India"></label>
-    <p class="muted" style="margin-top:-6px">Used for local names (Kannada in Karnataka) and seasonal quests. Your exact location never leaves the phone.</p>
-    <button class="btn block" type="button" id="saveSettings">Save</button>`);
-  $("saveSettings").onclick = () => { ls.set("region", $("regionIn").value.trim() || "Karnataka, India"); closeSheet(); loadQuest(true); toast("Saved"); };
-});
+// ---------- Best time to walk today (Open-Meteo: open data, no key) ----------
+const WMO_RAINY = new Set([51, 53, 55, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99]);
+async function bestTime() {
+  if (!navigator.onLine) return;
+  try {
+    let lat, lon;
+    const p = await getPos();
+    if (p) { lat = p.lat.toFixed(1); lon = p.lon.toFixed(1); } // about 10 km, enough for weather
+    else {
+      const g = await (await fetch(`https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&name=${encodeURIComponent(region().split(",")[0])}`)).json();
+      if (!g.results?.length) return;
+      ({ latitude: lat, longitude: lon } = g.results[0]);
+    }
+    const w = await (await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,precipitation_probability,weather_code&daily=sunrise,sunset&timezone=auto&forecast_days=2`)).json();
+    const now = new Date(), sunset = new Date(w.daily.sunset[0]), sunrise2 = new Date(w.daily.sunrise[1]), sunset2 = new Date(w.daily.sunset[1]);
+    const hours = w.hourly.time.map((t, i) => ({ t: new Date(t), temp: w.hourly.temperature_2m[i], rain: w.hourly.precipitation_probability[i] ?? 0, code: w.hourly.weather_code[i] }));
+    const tomorrow = now >= new Date(sunset.getTime() - 30 * 60000);
+    const daylight = tomorrow ? hours.filter((h) => h.t >= sunrise2 && h.t < sunset2) : hours.filter((h) => h.t >= new Date(now.getTime() - 30 * 60000) && h.t < sunset);
+    if (!daylight.length) return;
+    // Lower is better: rain matters most, then heat above 30 degrees, then waiting longer.
+    const score = (h) => h.rain * 1.5 + (WMO_RAINY.has(h.code) ? 40 : 0) + Math.max(0, h.temp - 30) * 8 + Math.max(0, (h.t - now) / 3600000) * 1.5;
+    const best = daylight.reduce((a, b) => (score(b) < score(a) ? b : a));
+    const fmt = (d) => d.toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit" });
+    const startsNow = !tomorrow && best.t <= now;
+    $("goCard").innerHTML = `<span style="width:46px;height:46px;border-radius:14px;background:var(--sun-soft);color:#9a6a00;display:grid;place-items:center;flex:none"><svg class="i" viewBox="0 0 24 24"><circle class="st" cx="12" cy="12" r="4"/><path class="st" d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span>
+      <div><div class="muted">${tomorrow ? "Best time tomorrow" : "Best time to walk today"}</div><b style="font-size:17px">${startsNow ? "Right now" : fmt(best.t)}</b> <span style="color:var(--ink2)">· ${Math.round(best.temp)}° · ${best.rain}% rain</span><div class="muted">Sunset ${fmt(tomorrow ? sunset2 : sunset)} · weather by Open-Meteo</div></div>`;
+    $("goCard").classList.remove("hidden");
+  } catch {}
+}
+
+// ---------- Where do you walk? (first open and settings) ----------
+function regionSheet(first = false) {
+  const examples = ["Karnataka, India", "Kerala, India", "California, USA", "Ontario, Canada", "England, UK", "Kenya"];
+  openSheet(`<h2 style="margin:6px 0 4px;font-size:23px;letter-spacing:-0.02em">${first ? "Where do you walk?" : "Your region"}</h2>
+    <p class="muted" style="margin:0 0 14px">Wayside uses it for names in your local language and for what's around this season.</p>
+    <label class="field"><span>State or region, and country</span><input id="regionIn" value="${esc(ls.get("region", null) || guessRegion())}" placeholder="e.g. Karnataka, India" autocomplete="off"></label>
+    <button class="btn soft block" type="button" id="locateBtn" style="margin:-4px 0 10px">Use my location</button>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">${examples.map((x) => `<button class="pill" type="button" data-ex="${esc(x)}" style="border:0;cursor:pointer">${esc(x)}</button>`).join("")}</div>
+    <label style="display:flex;align-items:center;gap:10px;margin:0 0 14px;font-weight:600"><input type="checkbox" id="speakIn" ${speechOn() ? "checked" : ""} style="width:20px;height:20px;accent-color:var(--leaf)">Speak results aloud (so the phone can stay in your pocket)</label>
+    <button class="btn leaf block" type="button" id="saveRegion">${first ? "Start exploring" : "Save"}</button>
+    <p class="muted" style="margin-top:10px">Only this region name is sent with your photos. Your exact location stays on the phone.</p>`);
+  $("sheetBody").onclick = (e) => { const b = e.target.closest("[data-ex]"); if (b) $("regionIn").value = b.dataset.ex; };
+  $("locateBtn").onclick = async () => {
+    const p = await getPos();
+    if (!p) return toast("Location is off. Type your region instead.");
+    $("locateBtn").textContent = "Finding your region…";
+    try {
+      // Rounded to about 10 km and asked at state level, so OpenStreetMap never sees the exact spot.
+      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=5&accept-language=en&lat=${p.lat.toFixed(1)}&lon=${p.lon.toFixed(1)}`);
+      const a = (await r.json()).address || {};
+      const name = [a.state || a.region || a.province, a.country].filter(Boolean).join(", ");
+      if (name) $("regionIn").value = name; else toast("Couldn't find it. Type your region instead.");
+    } catch { toast("No connection. Type your region instead."); }
+    $("locateBtn").textContent = "Use my location";
+  };
+  $("saveRegion").onclick = () => { unlockAudio(); ls.set("speak", $("speakIn").checked); ls.set("region", $("regionIn").value.trim() || guessRegion() || "India"); closeSheet(); loadQuest(true); bestTime(); if (!first) toast("Saved"); };
+}
+$("settingsBtn").addEventListener("click", () => regionSheet(false));
 
 // ---------- Start ----------
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
-updateNet(); renderWalk(); renderLists(); loadQuest();
+updateNet(); renderWalk(); renderLists(); bestTime();
+if (ls.get("region", null)) loadQuest(); else { $("questCard").innerHTML = `<p class="muted" style="margin:0">Tell Wayside where you walk to get today's quest.</p>`; regionSheet(true); }
 if (walk) { startTracking(); tick = setInterval(renderWalk, 1000); }
 </script>
 </body>

@@ -5,7 +5,7 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { askGemma, backendInfo, parseJson } from "./gemma.mjs";
-import { IDENTIFY, QUEST } from "./prompts.mjs";
+import { IDENTIFY, JOURNAL, QUEST } from "./prompts.mjs";
 
 try { process.loadEnvFile(".env"); } catch {}
 
@@ -45,6 +45,45 @@ async function quest(req, res) {
   json(res, 200, { ...parseJson(out.text), model: out.model });
 }
 
+async function journal(req, res) {
+  const input = await body(req);
+  const finds = (input.finds ?? []).slice(0, 20).map((x) => String(x).slice(0, 80));
+  const out = await askGemma(JOURNAL({ region: String(input.region ?? "").slice(0, 80), month: String(input.month ?? "").slice(0, 20), minutes: Math.round(Number(input.minutes) || 0), km: Number(input.km || 0).toFixed(1), finds }));
+  json(res, 200, { ...parseJson(out.text), model: out.model });
+}
+
+// Speech fallback: the phone's own voice is used first (Android Google TTS, Apple voices,
+// Windows voices). When the device has no voice for a language (Kannada on an iPhone, for
+// example), the app asks for a short clip from Google Cloud Text-to-Speech instead.
+const TTS_CACHE = new Map();
+async function cloudToken() {
+  const r = await fetch("http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token", { headers: { "Metadata-Flavor": "Google" }, signal: AbortSignal.timeout(3000) });
+  if (!r.ok) throw new Error("No Google Cloud credentials here");
+  return (await r.json()).access_token;
+}
+async function speak(req, res) {
+  const input = await body(req);
+  const text = String(input.text ?? "").slice(0, 400), lang = /^[a-z]{2,3}-[A-Z]{2}$/.test(input.lang) ? input.lang : "en-IN";
+  if (!text) return json(res, 400, { error: "Nothing to say." });
+  const key = `${lang}|${text}`;
+  let audio = TTS_CACHE.get(key);
+  if (!audio) {
+    const r = await fetch("https://texttospeech.googleapis.com/v1/text:synthesize", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${await cloudToken()}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ input: { text }, voice: { languageCode: lang }, audioConfig: { audioEncoding: "MP3", speakingRate: 0.95 } }),
+      signal: AbortSignal.timeout(15000),
+    });
+    const j = await r.json();
+    if (!r.ok) throw Object.assign(new Error(j.error?.message ?? "Speech failed"), { status: 502 });
+    audio = Buffer.from(j.audioContent, "base64");
+    if (TTS_CACHE.size > 300) TTS_CACHE.clear();
+    TTS_CACHE.set(key, audio);
+  }
+  res.writeHead(200, { "Content-Type": "audio/mpeg", "Cache-Control": "public, max-age=86400" });
+  res.end(audio);
+}
+
 async function serveStatic(req, res) {
   const url = new URL(req.url, "http://x");
   const rel = url.pathname === "/" ? "index.html" : decodeURIComponent(url.pathname).replace(/^\/+/, "");
@@ -63,6 +102,8 @@ createServer(async (req, res) => {
   try {
     if (req.method === "POST" && req.url === "/api/identify") return await identify(req, res);
     if (req.method === "POST" && req.url === "/api/quest") return await quest(req, res);
+    if (req.method === "POST" && req.url === "/api/journal") return await journal(req, res);
+    if (req.method === "POST" && req.url === "/api/speak") return await speak(req, res);
     if (req.method === "GET" && req.url === "/api/health") return json(res, 200, { ok: true, ...backendInfo() });
     if (req.method === "GET") return await serveStatic(req, res);
     json(res, 405, { error: "Method not allowed" });

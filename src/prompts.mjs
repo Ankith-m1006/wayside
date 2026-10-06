@@ -23,3 +23,8 @@ export const QUEST = ({ region, month, done }) => `You plan short nature walks f
 Suggest 3 things to find outside today that are common there in this season, each realistic to spot within a 30-minute walk${done?.length ? `, different from: ${done.join(", ")}` : ""}.
 Reply with JSON only: {"title": "a 3-6 word name for today's walk", "quests": [{"find": "what to find, specific (e.g. a flowering lantana bush)", "category": "plant | flower | tree | crop | bird | insect | other", "hint": "where to look and when, one sentence"}]}`;
 
+
+export const JOURNAL = ({ region, month, minutes, km, finds }) => `Write a short nature-journal entry (60 to 90 words, first person, warm and specific, no hashtags, no emojis) for a walk in ${region || "India"} in ${month}.
+The walk lasted ${minutes} minutes and covered ${km} km. Things spotted, in order: ${finds.length ? finds.join("; ") : "nothing identified"}.
+Mention only the things listed; do not invent sightings, weather or people. End with one line on what to look for next time.
+Reply with JSON only: {"title": "3-6 word title", "entry": "the text"}`;

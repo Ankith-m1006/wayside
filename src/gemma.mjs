@@ -19,12 +19,19 @@ async function google(prompt, image) {
   let lastError;
   for (const model of GOOGLE_MODELS) {
     for (let attempt = 0; attempt < 3; attempt++) {
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ role: "user", parts }], generationConfig: { temperature: 0.2 } }),
-        signal: AbortSignal.timeout(90000),
-      });
+      let r;
+      try {
+        r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contents: [{ role: "user", parts }], generationConfig: { temperature: 0.2 } }),
+          signal: AbortSignal.timeout(75000),
+        });
+      } catch (e) {
+        // A slow or dropped call moves straight on to the next model.
+        lastError = new Error(`${model}: ${e.name === "TimeoutError" ? "timed out" : e.message}`);
+        break;
+      }
       const j = await r.json().catch(() => ({}));
       if (r.ok) {
         const text = (j.candidates?.[0]?.content?.parts ?? []).filter((p) => !p.thought).map((p) => p.text ?? "").join("");
