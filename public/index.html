@@ -290,8 +290,70 @@ $("endWalk").addEventListener("click", async () => {
     <div class="summary"><div><b>${fmtMin(total)}</b><span>outside</span></div><div><b>${km(done.track).toFixed(2)} km</b><span>walked</span></div><div><b>${finds.length}</b><span>things spotted</span></div><div><b>${Math.round(outside * 100)}%</b><span>of the walk with the screen off</span></div></div>
     <div class="muted">Screen on ${fmtMin(screen)} of ${fmtMin(total)}</div><div class="ratio"><i style="width:${Math.max(1, Math.round((screen / total) * 100))}%"></i></div>
     ${finds.length ? `<div class="finds" style="margin-top:14px">${finds.map(findTile).join("")}</div>` : ""}
-    <button class="btn block" type="button" data-close style="margin-top:16px">Done</button></div>`);
+    <div class="row" style="display:flex;gap:8px;margin-top:16px"><button class="btn leaf" type="button" id="cardBtn" style="flex:1">Share walk card</button><button class="btn soft" type="button" data-close style="flex:1">Done</button></div></div>`);
+  $("cardBtn").onclick = async () => {
+    const cv = await walkCard(done, finds, total, screen);
+    const name = `wayside-walk-${new Date(done.startedAt).toISOString().slice(0, 10)}.png`;
+    const blob = await new Promise((r) => cv.toBlob(r, "image/png"));
+    const file = new File([blob], name, { type: "image/png" });
+    try {
+      if (navigator.canShare?.({ files: [file] })) return await navigator.share({ files: [file], title: "My walk" });
+    } catch { return; }
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; a.click(); toast("Walk card saved");
+  };
 });
+
+// ---------- Walk card: a picture of the walk to share (stats, route, finds) ----------
+const loadImg = (src) => new Promise((res) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
+async function walkCard(w, finds, total, screen) {
+  await Promise.all([document.fonts.load('800 80px "Figtree"'), document.fonts.load('700 40px "Noto Sans Kannada"')]).catch(() => {});
+  const W = 1080, H = 1350, c = document.createElement("canvas"); c.width = W; c.height = H;
+  const g = c.getContext("2d"), F = (wt, px, fam = "Figtree") => `${wt} ${px}px "${fam}", system-ui, sans-serif`;
+  g.fillStyle = "#f6f5f0"; g.fillRect(0, 0, W, H);
+  // Header
+  g.fillStyle = "#1f7a4d"; g.beginPath(); g.roundRect(72, 72, 64, 64, 18); g.fill();
+  g.fillStyle = "#fff"; g.beginPath(); g.moveTo(90, 120); g.bezierCurveTo(90, 98, 104, 86, 122, 84); g.bezierCurveTo(120, 104, 108, 120, 90, 120); g.fill();
+  g.fillStyle = "#14201a"; g.font = F(800, 40); g.fillText("wayside", 152, 117);
+  g.fillStyle = "#85908a"; g.font = F(600, 30); g.textAlign = "right";
+  g.fillText(new Date(w.startedAt).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "long" }), W - 72, 117); g.textAlign = "left";
+  g.fillStyle = "#14201a"; g.font = F(800, 74); g.fillText(quest?.title && quest.title.length < 26 ? quest.title : "A walk outside", 72, 250);
+  g.fillStyle = "#4a5650"; g.font = F(600, 32); g.fillText(region(), 72, 300);
+  // Stats
+  const stats = [[fmtMin(total), "outside"], [`${km(w.track).toFixed(1)} km`, "walked"], [String(finds.length), finds.length === 1 ? "find" : "finds"], [`${Math.round(Math.max(0, 1 - screen / total) * 100)}%`, "screen off"]];
+  stats.forEach(([v, l], i) => {
+    const x = 72 + i * 240;
+    g.fillStyle = i === 3 ? "#1f7a4d" : "#ffffff"; g.beginPath(); g.roundRect(x, 350, 216, 150, 26); g.fill();
+    g.fillStyle = i === 3 ? "#fff" : "#14201a"; g.font = F(800, 52); g.fillText(v, x + 24, 430);
+    g.fillStyle = i === 3 ? "#d6efe1" : "#4a5650"; g.font = F(600, 28); g.fillText(l, x + 24, 474);
+  });
+  // Route (if any) in a panel
+  const box = { x: 72, y: 540, w: W - 144, h: 300 };
+  g.fillStyle = "#ffffff"; g.beginPath(); g.roundRect(box.x, box.y, box.w, box.h, 28); g.fill();
+  if (w.track.length > 1) {
+    const lats = w.track.map((p) => p[0]), lons = w.track.map((p) => p[1]);
+    const [a0, a1, o0, o1] = [Math.min(...lats), Math.max(...lats), Math.min(...lons), Math.max(...lons)];
+    const sx = (box.w - 80) / Math.max(o1 - o0, 1e-6), sy = (box.h - 80) / Math.max(a1 - a0, 1e-6), s = Math.min(sx, sy);
+    const px = (p) => [box.x + 40 + (p[1] - o0) * s + ((box.w - 80) - (o1 - o0) * s) / 2, box.y + 40 + (a1 - p[0]) * s + ((box.h - 80) - (a1 - a0) * s) / 2];
+    g.strokeStyle = "#1f7a4d"; g.lineWidth = 10; g.lineJoin = g.lineCap = "round"; g.beginPath();
+    w.track.forEach((p, i) => { const [x, y] = px(p); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke();
+    for (const f of finds.filter((f) => f.pos)) { const [x, y] = px([f.pos.lat, f.pos.lon]); g.fillStyle = "#c4502a"; g.beginPath(); g.arc(x, y, 14, 0, Math.PI * 2); g.fill(); g.strokeStyle = "#fff"; g.lineWidth = 5; g.stroke(); }
+  } else {
+    g.fillStyle = "#85908a"; g.font = F(600, 30); g.textAlign = "center"; g.fillText("Route appears when location is on", W / 2, box.y + box.h / 2 + 10); g.textAlign = "left";
+  }
+  // Finds
+  const shown = finds.filter((f) => f.result?.common_name).slice(0, 4);
+  const tw = (W - 144 - 3 * 24) / 4;
+  for (const [i, f] of shown.entries()) {
+    const x = 72 + i * (tw + 24), y = 880, img = await loadImg(f.thumb);
+    g.save(); g.beginPath(); g.roundRect(x, y, tw, tw, 24); g.clip();
+    if (img) { const sc = Math.max(tw / img.width, tw / img.height); g.drawImage(img, x + (tw - img.width * sc) / 2, y + (tw - img.height * sc) / 2, img.width * sc, img.height * sc); }
+    g.restore();
+    g.fillStyle = "#14201a"; g.font = F(700, 28); g.fillText(f.result.common_name.slice(0, 16), x, y + tw + 40);
+    const ln = localName(f); if (ln) { g.fillStyle = "#1f7a4d"; g.font = F(700, 26, "Noto Sans Kannada"); g.fillText(ln.name.slice(0, 14), x, y + tw + 76); }
+  }
+  g.fillStyle = "#85908a"; g.font = F(600, 26); g.fillText("Identified with Gemma, an open-weight model · wayside", 72, H - 60);
+  return c;
+}
 
 // ---------- Today's quest ----------
 let quest = ls.get("quest", null);
