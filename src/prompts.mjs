@@ -17,7 +17,7 @@ Reply with JSON only, in exactly this shape:
   "safety": { "level": "safe | caution | danger", "note": "short: is it safe to touch, smell or eat; for anything unknown say do not eat" },
   "next_quest": "one related thing to look for nearby on this walk"
 }
-Rules: never guess a local name you are not sure of; use null. Do not give a name from a different Indian language (for example a Marathi or Hindi name for a Kannada request). If the photo shows no clear subject, use "none" and say what to try. Be honest about uncertainty. Never say any wild plant or mushroom is safe to eat.`;
+Rules: never guess a local name you are not sure of; use null. Do not give a name from a different Indian language (for example a Marathi or Hindi name for a Kannada request). Do not give the English name written in the local script (for example "ಬುಲ್ಬುಲ್" for bulbul); that is a transliteration, not a local name, so use null instead. If the photo shows no clear subject, use "none" and say what to try. Be honest about uncertainty. Never say any wild plant or mushroom is safe to eat.`;
 
 export const QUEST = ({ region, month, done }) => `You plan short nature walks for someone in ${region || "India"} in ${month}.
 Suggest 3 things to find outside today that are common there in this season, each realistic to spot within a 30-minute walk${done?.length ? `, different from: ${done.join(", ")}` : ""}.
