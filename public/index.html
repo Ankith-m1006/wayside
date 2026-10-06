@@ -297,11 +297,9 @@ $("endWalk").addEventListener("click", async () => {
   const outside = Math.max(0, 1 - screen / total);
   openSheet(`<div style="padding-top:6px"><div class="muted">Walk complete</div><h2 style="margin:2px 0 4px;font-size:25px;letter-spacing:-0.03em">${esc(questTitle() || "Nice walk")}</h2>
     <div class="summary"><div><b>${fmtMin(total)}</b><span>outside</span></div><div><b>${km(done.track).toFixed(2)} km</b><span>walked</span></div><div><b>${finds.length}</b><span>things spotted</span></div><div><b>${Math.round(outside * 100)}%</b><span>of the walk with the screen off</span></div></div>
-    <div class="box dyk" id="journalBox"><h4>Your walk, in words</h4><div class="thinking" style="padding:4px 0"><span class="spin"></span>Gemma is writing your nature journal…</div></div>
-    <div class="muted" style="margin-top:12px">Screen on ${fmtMin(screen)} of ${fmtMin(total)}</div><div class="ratio"><i style="width:${Math.max(1, Math.round((screen / total) * 100))}%"></i></div>
+    <div class="muted">Screen on ${fmtMin(screen)} of ${fmtMin(total)}</div><div class="ratio"><i style="width:${Math.max(1, Math.round((screen / total) * 100))}%"></i></div>
     ${finds.length ? `<div class="finds" style="margin-top:14px">${finds.map(findTile).join("")}</div>` : ""}
     <div class="row" style="display:flex;gap:8px;margin-top:16px"><button class="btn leaf" type="button" id="cardBtn" style="flex:1">Share walk card</button><button class="btn soft" type="button" data-close style="flex:1">Done</button></div></div>`);
-  writeJournal(done, finds, total);
   $("cardBtn").onclick = async () => {
     const cv = await walkCard(done, finds, total, screen);
     const name = `wayside-walk-${new Date(done.startedAt).toISOString().slice(0, 10)}.png`;
@@ -313,24 +311,6 @@ $("endWalk").addEventListener("click", async () => {
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; a.click(); toast("Walk card saved");
   };
 });
-
-// ---------- Nature journal: Gemma writes up the walk from what was actually found ----------
-async function writeJournal(w, finds, total) {
-  const box = () => $("journalBox");
-  const names = finds.map((f) => (f.result?.common_name ? `${f.result.common_name}${localName(f) ? ` (${localName(f).name})` : ""}` : null)).filter(Boolean);
-  if (!navigator.onLine) { if (box()) box().innerHTML = `<h4>Your walk, in words</h4><span class="muted">Gemma will write this when you are back in range.</span>`; return; }
-  try {
-    const r = await fetch("/api/journal", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ region: region(), month: month(), minutes: total / 60000, km: km(w.track), finds: names }) });
-    const j = await r.json();
-    if (!r.ok) throw new Error(j.error);
-    const walks = ls.get("walks", []), last = walks.find((x) => x.id === w.id);
-    if (last) { last.journal = j; ls.set("walks", walks); }
-    if (box()) {
-      box().innerHTML = `<h4>${esc(j.title || "Your walk, in words")}</h4><p style="margin:0 0 8px">${esc(j.entry)}</p><button class="btn soft sm" type="button" id="copyJournal">Copy</button>`;
-      $("copyJournal").onclick = () => navigator.clipboard?.writeText([j.title, "", j.entry].join("\n")).then(() => toast("Copied"));
-    }
-  } catch { if (box()) box().innerHTML = `<h4>Your walk, in words</h4><span class="muted">Couldn't write it just now.</span>`; }
-}
 
 // ---------- Walk card: a picture of the walk to share (stats, route, finds) ----------
 const loadImg = (src) => new Promise((res) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });

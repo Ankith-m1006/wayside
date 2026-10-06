@@ -5,7 +5,7 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { askGemma, backendInfo, parseJson } from "./gemma.mjs";
-import { IDENTIFY, JOURNAL, QUEST } from "./prompts.mjs";
+import { IDENTIFY, QUEST } from "./prompts.mjs";
 
 try { process.loadEnvFile(".env"); } catch {}
 
@@ -42,13 +42,6 @@ async function identify(req, res) {
 async function quest(req, res) {
   const input = await body(req);
   const out = await askGemma(QUEST({ region: String(input.region ?? "").slice(0, 80), month: String(input.month ?? "").slice(0, 20), done: (input.done ?? []).slice(0, 10).map(String) }));
-  json(res, 200, { ...parseJson(out.text), model: out.model });
-}
-
-async function journal(req, res) {
-  const input = await body(req);
-  const finds = (input.finds ?? []).slice(0, 20).map((x) => String(x).slice(0, 80));
-  const out = await askGemma(JOURNAL({ region: String(input.region ?? "").slice(0, 80), month: String(input.month ?? "").slice(0, 20), minutes: Math.round(Number(input.minutes) || 0), km: Number(input.km || 0).toFixed(1), finds }));
   json(res, 200, { ...parseJson(out.text), model: out.model });
 }
 
@@ -102,7 +95,6 @@ createServer(async (req, res) => {
   try {
     if (req.method === "POST" && req.url === "/api/identify") return await identify(req, res);
     if (req.method === "POST" && req.url === "/api/quest") return await quest(req, res);
-    if (req.method === "POST" && req.url === "/api/journal") return await journal(req, res);
     if (req.method === "POST" && req.url === "/api/speak") return await speak(req, res);
     if (req.method === "GET" && req.url === "/api/health") return json(res, 200, { ok: true, ...backendInfo() });
     if (req.method === "GET") return await serveStatic(req, res);

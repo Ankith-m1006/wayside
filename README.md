@@ -10,7 +10,9 @@ Built for the DEV Hacktoberfest Open-Source AI Challenge, Week 1: *Touch Grass*.
 
 Most nature apps keep you looking at the screen. Wayside is built the other way round:
 
-- **Snap and keep walking.** Identification takes a few seconds; your phone buzzes when it is ready.
+- **Snap and keep walking.** Identification takes a few seconds; your phone buzzes and **reads the result aloud** when it is ready, so the phone stays in your pocket. Speech uses the device's own voices (Android Google TTS, Apple voices on iPhone and Mac, Windows voices); if the device has no voice for the local language, such as Kannada on an iPhone, a short clip comes from Google Cloud Text-to-Speech.
+- **Go at the right time.** "Best time to walk today" picks the driest, coolest hour before sunset from Open-Meteo's open weather data.
+- **Anywhere.** On first open Wayside asks where you walk (suggested from the phone's time zone, or from location at state level only), so local names and seasonal quests fit Karnataka, California or Kenya alike.
 - **Look up from the screen.** Every result comes with two things to check in person (count the petals, look at how the leaves pair up, listen for the call).
 - **Ask someone nearby.** Local names change from village to village, so Wayside only shows a local name when the model is very sure. Otherwise it asks you to ask a neighbour what they call it, and saves their answer.
 - **A quest a day.** Three things that are common where you are in this season, to give the walk a purpose.
@@ -55,7 +57,9 @@ gcloud run deploy wayside --source . --region asia-south1 --set-secrets GEMINI_A
 ## Files
 
 ```
-src/server.mjs     HTTP server, prompts, /api/identify and /api/quest
+src/server.mjs     HTTP server: /api/identify, /api/quest, /api/speak (speech fallback)
+src/prompts.mjs    the prompts sent to Gemma
+scripts/fieldtest.mjs  scores Gemma on photos with known answers
 src/gemma.mjs      Gemma backends (Google AI Studio or Ollama), JSON parsing, retries
 public/index.html  the whole app (walk, journal, map), no build step
 public/sw.js       offline app shell and tile cache
