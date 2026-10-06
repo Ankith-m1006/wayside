@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f5f0">
+<title>Wayside</title>
+<meta name="description" content="A pocket field guide for walks. Snap a plant, bird or insect; Gemma names it in English and your local language and tells you what to look for. Works with patchy signal.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=Noto+Sans+Kannada:wght@600;700&display=swap">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+<style>
+:root {
+  --bg: #f6f5f0; --surface: #ffffff; --ink: #14201a; --ink2: #4a5650; --mute: #85908a; --line: #e6e4dc; --chip: #efeee7;
+  --leaf: #1f7a4d; --leaf-soft: #e4f2ea; --sun: #e0a21b; --sun-soft: #fbf1d9; --clay: #c4502a; --clay-soft: #fbe9e2;
+  --r: 20px; --font: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif; --kn: "Noto Sans Kannada", var(--font);
+  color-scheme: light;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 15.5px/1.5 var(--font); -webkit-font-smoothing: antialiased; }
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2.5px solid var(--leaf); outline-offset: 2px; }
+.hidden { display: none !important; }
+svg.i { width: 20px; height: 20px; flex: none; }
+.st { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+.app { max-width: 480px; margin: 0 auto; min-height: 100vh; padding: 0 16px calc(120px + env(safe-area-inset-bottom)); }
+.top { display: flex; align-items: center; gap: 10px; padding: 16px 2px 8px; }
+.logo { width: 32px; height: 32px; }
+.brand { font-weight: 800; font-size: 19px; letter-spacing: -0.03em; }
+.net { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; color: var(--leaf); background: var(--leaf-soft); border-radius: 999px; padding: 5px 10px; }
+.net.off { color: var(--clay); background: var(--clay-soft); }
+.net i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.iconbtn { border: 1px solid var(--line); background: var(--surface); width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; color: var(--ink2); }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; margin-bottom: 12px; }
+.h1 { font-size: 27px; line-height: 1.12; letter-spacing: -0.03em; font-weight: 800; margin: 8px 2px 6px; }
+.sub { color: var(--ink2); margin: 0 2px 14px; }
+.label { font-size: 12px; font-weight: 800; color: var(--mute); text-transform: uppercase; letter-spacing: .07em; margin: 20px 4px 10px; display: flex; align-items: center; gap: 8px; }
+.label .more { margin-left: auto; text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--leaf); background: none; border: 0; font-weight: 700; padding: 0; }
+.muted { color: var(--mute); font-size: 13px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: 15px; padding: 14px 18px; font-weight: 700; background: var(--ink); color: #fff; text-decoration: none; }
+.btn:active { transform: scale(.98); }
+.btn.leaf { background: var(--leaf); }
+.btn.soft { background: var(--chip); color: var(--ink); }
+.btn.block { width: 100%; }
+.btn.sm { padding: 9px 13px; font-size: 14px; border-radius: 12px; }
+.btn svg { width: 18px; height: 18px; }
+
+/* Walk status */
+.walk { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.walk div { background: var(--chip); border-radius: 14px; padding: 10px 12px; }
+.walk b { display: block; font-size: 21px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; }
+.walk span { font-size: 12px; font-weight: 600; color: var(--ink2); }
+.walk-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.walk-head .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--clay); box-shadow: 0 0 0 4px var(--clay-soft); animation: pulse 1.6s ease infinite; }
+@keyframes pulse { 50% { box-shadow: 0 0 0 7px transparent; } }
+
+/* Quests */
+.quest { display: grid; grid-template-columns: 30px 1fr; gap: 10px; padding: 11px 0; border-top: 1px solid var(--line); }
+.quest:first-of-type { border-top: 0; padding-top: 2px; }
+.quest .tick { width: 30px; height: 30px; border-radius: 10px; border: 2px solid var(--line); background: none; display: grid; place-items: center; color: transparent; }
+.quest.done .tick { background: var(--leaf); border-color: var(--leaf); color: #fff; }
+.quest.done b { text-decoration: line-through; color: var(--ink2); }
+.quest b { font-size: 15px; display: block; line-height: 1.3; }
+.quest small { color: var(--mute); font-size: 13px; }
+
+/* Finds */
+.finds { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.find { border: 1px solid var(--line); background: var(--surface); border-radius: 18px; overflow: hidden; text-align: left; padding: 0; position: relative; }
+.find img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: var(--chip); }
+.find .t { padding: 9px 11px 11px; }
+.find b { display: block; font-size: 14px; line-height: 1.25; }
+.find .kn { font-family: var(--kn); font-size: 13px; color: var(--leaf); font-weight: 700; }
+.find small { color: var(--mute); font-size: 12px; }
+.find .badge { position: absolute; top: 8px; left: 8px; background: rgba(20,32,26,.78); color: #fff; font-size: 11.5px; font-weight: 700; border-radius: 999px; padding: 3px 8px; backdrop-filter: blur(4px); }
+.empty { text-align: center; color: var(--mute); padding: 24px 12px; border: 1.5px dashed var(--line); border-radius: 18px; }
+
+/* Camera button */
+.fab { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom)); z-index: 30; display: flex; gap: 10px; width: min(448px, calc(100% - 32px)); }
+.fab .shoot { flex: 1; display: flex; align-items: center; justify-content: center; gap: 10px; background: var(--leaf); color: #fff; border: 0; border-radius: 20px; padding: 16px; font-size: 17px; font-weight: 800; box-shadow: 0 10px 30px rgba(31,122,77,.35); }
+.fab .shoot svg { width: 24px; height: 24px; }
+.fab .side { width: 58px; border: 1px solid var(--line); background: var(--surface); border-radius: 20px; display: grid; place-items: center; color: var(--ink2); box-shadow: 0 6px 20px rgba(20,32,26,.08); }
+
+/* Map */
+#map { height: 62vh; border-radius: var(--r); border: 1px solid var(--line); overflow: hidden; }
+.leaflet-popup-content { font: 13px/1.4 var(--font); margin: 10px 12px; }
+.leaflet-popup-content img { width: 140px; border-radius: 10px; display: block; margin-bottom: 6px; }
+
+/* Sheet */
+.scrim { position: fixed; inset: 0; background: rgba(10,14,12,.45); z-index: 60; opacity: 0; pointer-events: none; transition: opacity .2s; }
+.scrim.open { opacity: 1; pointer-events: auto; }
+.sheet { position: fixed; left: 50%; bottom: 0; transform: translate(-50%, 105%); width: 100%; max-width: 480px; max-height: 92vh; overflow-y: auto; background: var(--surface); border-radius: 26px 26px 0 0; z-index: 70; padding: 8px 16px calc(22px + env(safe-area-inset-bottom)); transition: transform .3s cubic-bezier(.2,.8,.2,1); }
+.sheet.open { transform: translate(-50%, 0); }
+.grab { width: 40px; height: 5px; border-radius: 3px; background: var(--line); margin: 4px auto 12px; }
+.close { position: absolute; right: 14px; top: 14px; border: 0; background: var(--chip); width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: var(--ink2); }
+.photo { width: 100%; max-height: 320px; object-fit: cover; border-radius: 18px; display: block; background: var(--chip); }
+.names { margin: 14px 2px 4px; }
+.names h2 { margin: 0; font-size: 25px; letter-spacing: -0.03em; line-height: 1.15; }
+.names .kn { font-family: var(--kn); font-size: 21px; color: var(--leaf); font-weight: 700; margin-top: 2px; }
+.names i { color: var(--ink2); font-size: 14px; }
+.pills { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 2px; }
+.pill { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 700; padding: 5px 10px; border-radius: 999px; background: var(--chip); color: var(--ink2); }
+.pill.good { background: var(--leaf-soft); color: var(--leaf); }
+.pill.warn { background: var(--sun-soft); color: #9a6a00; }
+.pill.bad { background: var(--clay-soft); color: var(--clay); }
+.box { border-radius: 16px; padding: 12px 14px; margin-top: 10px; }
+.box h4 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--mute); }
+.look { background: var(--leaf-soft); }
+.look label { display: flex; gap: 10px; align-items: flex-start; padding: 5px 0; font-weight: 600; }
+.look input { width: 20px; height: 20px; accent-color: var(--leaf); margin: 1px 0 0; flex: none; }
+.dyk { background: var(--sun-soft); }
+.safe { border: 1px solid var(--line); display: flex; gap: 10px; }
+.nextq { border: 1.5px dashed var(--leaf); color: var(--ink); }
+.thinking { display: flex; align-items: center; gap: 12px; padding: 18px 4px; color: var(--ink2); font-weight: 600; }
+.spin { width: 22px; height: 22px; border-radius: 50%; border: 3px solid var(--leaf-soft); border-top-color: var(--leaf); animation: spin .8s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 12px 0; }
+.summary div { background: var(--chip); border-radius: 16px; padding: 12px; }
+.summary b { display: block; font-size: 24px; font-weight: 800; letter-spacing: -0.02em; }
+.summary span { font-size: 12.5px; color: var(--ink2); font-weight: 600; }
+.ratio { height: 12px; border-radius: 6px; background: var(--leaf); overflow: hidden; display: flex; margin: 8px 0 4px; }
+.ratio i { background: var(--clay); display: block; height: 100%; }
+.field { display: block; margin-bottom: 14px; }
+.field span { display: block; font-weight: 700; font-size: 13.5px; margin-bottom: 6px; }
+.field input { width: 100%; border: 1.5px solid var(--line); border-radius: 14px; background: var(--surface); padding: 12px 14px; outline: none; }
+.field input:focus { border-color: var(--leaf); }
+.tabs { display: flex; gap: 6px; background: var(--chip); padding: 4px; border-radius: 14px; margin: 6px 0 14px; }
+.tabs button { flex: 1; border: 0; background: none; border-radius: 11px; padding: 9px 0; font-weight: 700; color: var(--ink2); font-size: 14px; }
+.tabs button.on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.toast { position: fixed; left: 50%; bottom: 100px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 11px 16px; border-radius: 14px; font-weight: 700; font-size: 14px; z-index: 90; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 90%; text-align: center; }
+.toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#1f7a4d"/><path d="M9 23c0-8 6-13 14-14-1 8-6 14-14 14z" fill="#fff"/><path d="M9 23c3-4 6-7 10-10" stroke="#1f7a4d" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+    <span class="brand">wayside</span>
+    <span class="net" id="net"><i></i><span>Online</span></span>
+    <button class="iconbtn" id="settingsBtn" type="button" aria-label="Settings"><svg class="i" viewBox="0 0 24 24"><path class="st" d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+  </header>
+
+  <div class="tabs" id="tabs">
+    <button type="button" data-tab="walk" class="on">Walk</button>
+    <button type="button" data-tab="journal">Journal</button>
+    <button type="button" data-tab="map">Map</button>
+  </div>
+
+  <!-- Walk -->
+  <section data-view="walk">
+    <div id="intro">
+      <div class="h1">Put the phone away. Go see what's out there.</div>
+      <p class="sub">Snap anything that catches your eye. Wayside names it, in English and your language, and tells you what to look at with your own eyes.</p>
+    </div>
+    <div class="card hidden" id="walkCard">
+      <div class="walk-head"><span class="dot"></span><b>Walk in progress</b><button class="btn soft sm" id="endWalk" type="button" style="margin-left:auto">End walk</button></div>
+      <div class="walk"><div><b id="wTime">0:00</b><span>outside</span></div><div><b id="wDist">0.0</b><span>km walked</span></div><div><b id="wFinds">0</b><span>finds</span></div></div>
+    </div>
+    <button class="btn leaf block" id="startWalk" type="button" style="margin-bottom:12px"><svg class="i" viewBox="0 0 24 24"><path class="st" d="M13 4a2 2 0 1 0 0-.1M7 21l3-6 3 2v4M10 15l-1-5 4-2 3 3 3 1M9 10l-3 2v3"/></svg>Start a walk</button>
+
+    <div class="label">Today's quest <button class="more" id="newQuest" type="button">New quest</button></div>
+    <div class="card" id="questCard"><div class="thinking"><span class="spin"></span>Asking Gemma what's around this season…</div></div>
+
+    <div class="label">Latest finds <button class="more" data-goto="journal" type="button">See all</button></div>
+    <div class="finds" id="recent"></div>
+  </section>
+
+  <!-- Journal -->
+  <section data-view="journal" class="hidden">
+    <div class="h1" style="font-size:24px">Field journal</div>
+    <p class="sub" id="journalSub">Everything you've spotted, saved on this phone.</p>
+    <div class="finds" id="journal"></div>
+  </section>
+
+  <!-- Map -->
+  <section data-view="map" class="hidden">
+    <div class="h1" style="font-size:24px">Your walks</div>
+    <p class="sub">Your route and finds. Location never leaves this phone.</p>
+    <div id="map"></div>
+  </section>
+</div>
+
+<div class="fab">
+  <button class="shoot" id="shoot" type="button"><svg class="i" viewBox="0 0 24 24"><path class="st" d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle class="st" cx="12" cy="13.5" r="3.5"/></svg>Spot something</button>
+  <button class="side" id="pick" type="button" aria-label="Pick a photo from gallery"><svg class="i" viewBox="0 0 24 24"><rect class="st" x="3.5" y="3.5" width="17" height="17" rx="4"/><circle class="st" cx="9" cy="9" r="1.8"/><path class="st" d="m20.5 15-5-5-10 10"/></svg></button>
+</div>
+<input type="file" id="cam" accept="image/*" capture="environment" hidden>
+<input type="file" id="gallery" accept="image/*" hidden>
+
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true"><div class="grab"></div><button class="close" type="button" data-close aria-label="Close"><svg class="i" viewBox="0 0 24 24"><path class="st" d="M6 6l12 12M18 6 6 18"/></svg></button><div id="sheetBody"></div></div>
+<div class="toast" id="toast" role="status"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const ls = { get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
+const month = () => new Date().toLocaleDateString("en-GB", { month: "long" });
+const region = () => ls.get("region", "Karnataka, India");
+function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add("show"); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove("show"), 2200); }
+
+// ---------- Storage: finds (with photos) live in IndexedDB on the phone ----------
+const db = new Promise((resolve, reject) => {
+  const r = indexedDB.open("wayside", 1);
+  r.onupgradeneeded = () => r.result.createObjectStore("finds", { keyPath: "id" });
+  r.onsuccess = () => resolve(r.result);
+  r.onerror = () => reject(r.error);
+});
+async function tx(mode, fn) { const d = await db; return new Promise((res, rej) => { const t = d.transaction("finds", mode); const out = fn(t.objectStore("finds")); t.oncomplete = () => res(out?.result ?? out); t.onerror = () => rej(t.error); }); }
+const putFind = (f) => tx("readwrite", (s) => s.put(f));
+const allFinds = async () => ((await tx("readonly", (s) => s.getAll())) || []).sort((a, b) => b.createdAt - a.createdAt);
+
+// ---------- Online / offline ----------
+function updateNet() {
+  const on = navigator.onLine;
+  $("net").classList.toggle("off", !on);
+  $("net").lastElementChild.textContent = on ? "Online" : "No signal";
+  if (on) processQueue();
+}
+addEventListener("online", updateNet);
+addEventListener("offline", updateNet);
+
+// ---------- Walk: time outside, distance, screen time ----------
+let walk = ls.get("walk", null), watchId = null, tick = null;
+function haversine(a, b) { const R = 6371, r = (x) => (x * Math.PI) / 180; const dLat = r(b[0] - a[0]), dLon = r(b[1] - a[1]); const h = Math.sin(dLat / 2) ** 2 + Math.cos(r(a[0])) * Math.cos(r(b[0])) * Math.sin(dLon / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); }
+const km = (pts) => pts.reduce((s, p, i) => (i ? s + haversine(pts[i - 1], p) : 0), 0);
+const fmtMin = (ms) => { const m = Math.floor(ms / 60000); return m >= 60 ? `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")} h` : `${m}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, "0")}`; };
+function saveWalk() { ls.set("walk", walk); }
+function renderWalk() {
+  const on = Boolean(walk);
+  $("walkCard").classList.toggle("hidden", !on);
+  $("startWalk").classList.toggle("hidden", on);
+  $("intro").classList.toggle("hidden", on);
+  if (!on) return;
+  $("wTime").textContent = fmtMin(Date.now() - walk.startedAt);
+  $("wDist").textContent = km(walk.track).toFixed(2);
+  $("wFinds").textContent = walk.finds.length;
+}
+function startTracking() {
+  if (!("geolocation" in navigator)) return;
+  watchId = navigator.geolocation.watchPosition((p) => {
+    if (!walk) return;
+    const pt = [p.coords.latitude, p.coords.longitude];
+    const last = walk.track.at(-1);
+    // Ignore jitter: only record moves of more than ~8 m with reasonable accuracy.
+    if (p.coords.accuracy < 60 && (!last || haversine(last, pt) > 0.008)) { walk.track.push(pt); saveWalk(); }
+    lastPos = { lat: pt[0], lon: pt[1], accuracy: p.coords.accuracy };
+  }, () => {}, { enableHighAccuracy: true, maximumAge: 15000 });
+}
+let lastPos = null;
+function getPos() {
+  return new Promise((res) => {
+    if (lastPos) return res(lastPos);
+    if (!("geolocation" in navigator)) return res(null);
+    navigator.geolocation.getCurrentPosition((p) => res({ lat: p.coords.latitude, lon: p.coords.longitude, accuracy: p.coords.accuracy }), () => res(null), { enableHighAccuracy: true, timeout: 6000, maximumAge: 60000 });
+  });
+}
+// Screen time: how long Wayside is actually on screen during the walk.
+let visibleSince = document.visibilityState === "visible" ? Date.now() : null;
+document.addEventListener("visibilitychange", () => {
+  if (!walk) { visibleSince = document.visibilityState === "visible" ? Date.now() : null; return; }
+  if (document.visibilityState === "hidden" && visibleSince) { walk.screenMs += Date.now() - visibleSince; visibleSince = null; saveWalk(); }
+  if (document.visibilityState === "visible") visibleSince = Date.now();
+});
+$("startWalk").addEventListener("click", () => {
+  walk = { id: Date.now(), startedAt: Date.now(), track: [], finds: [], screenMs: 0 };
+  visibleSince = Date.now();
+  saveWalk(); renderWalk(); startTracking();
+  tick = setInterval(renderWalk, 1000);
+  toast("Walk started. Pocket the phone and look around.");
+});
+$("endWalk").addEventListener("click", async () => {
+  if (visibleSince) { walk.screenMs += Date.now() - visibleSince; visibleSince = Date.now(); }
+  const total = Date.now() - walk.startedAt, screen = Math.min(walk.screenMs, total);
+  const done = walk;
+  const walks = ls.get("walks", []); walks.push({ ...done, endedAt: Date.now() }); ls.set("walks", walks.slice(-30));
+  walk = null; saveWalk(); clearInterval(tick); if (watchId != null) navigator.geolocation.clearWatch(watchId);
+  renderWalk();
+  const finds = (await allFinds()).filter((f) => done.finds.includes(f.id));
+  const outside = Math.max(0, 1 - screen / total);
+  openSheet(`<div style="padding-top:6px"><div class="muted">Walk complete</div><h2 style="margin:2px 0 4px;font-size:25px;letter-spacing:-0.03em">${esc(questTitle() || "Nice walk")}</h2>
+    <div class="summary"><div><b>${fmtMin(total)}</b><span>outside</span></div><div><b>${km(done.track).toFixed(2)} km</b><span>walked</span></div><div><b>${finds.length}</b><span>things spotted</span></div><div><b>${Math.round(outside * 100)}%</b><span>of the walk with the screen off</span></div></div>
+    <div class="muted">Screen on ${fmtMin(screen)} of ${fmtMin(total)}</div><div class="ratio"><i style="width:${Math.max(1, Math.round((screen / total) * 100))}%"></i></div>
+    ${finds.length ? `<div class="finds" style="margin-top:14px">${finds.map(findTile).join("")}</div>` : ""}
+    <button class="btn block" type="button" data-close style="margin-top:16px">Done</button></div>`);
+});
+
+// ---------- Today's quest ----------
+let quest = ls.get("quest", null);
+const questTitle = () => quest?.title;
+async function loadQuest(force = false) {
+  const today = new Date().toISOString().slice(0, 10);
+  if (!force && quest?.date === today && quest.region === region()) return renderQuest();
+  if (!navigator.onLine) { if (quest) return renderQuest(); $("questCard").innerHTML = `<p class="muted" style="margin:0">No signal. Today's quest will load when you're back in range. You can still snap finds.</p>`; return; }
+  $("questCard").innerHTML = `<div class="thinking"><span class="spin"></span>Asking Gemma what's around this season…</div>`;
+  try {
+    const r = await fetch("/api/quest", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ region: region(), month: month(), done: force ? (quest?.quests || []).map((q) => q.find) : [] }) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error);
+    quest = { date: today, region: region(), title: j.title, quests: (j.quests || []).slice(0, 3).map((q) => ({ ...q, done: false })) };
+    ls.set("quest", quest);
+  } catch (e) { $("questCard").innerHTML = `<p class="muted" style="margin:0">Couldn't load a quest: ${esc(e.message)}</p>`; return; }
+  renderQuest();
+}
+function renderQuest() {
+  if (!quest) return;
+  $("questCard").innerHTML = `<div style="font-weight:800;font-size:16px;margin-bottom:8px">${esc(quest.title)}</div>` + quest.quests.map((q, i) => `<div class="quest ${q.done ? "done" : ""}"><button class="tick" type="button" data-q="${i}" aria-label="Mark found"><svg class="i" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="m5.5 12.5 4 4 9-9.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></button><div><b>${esc(q.find)}</b><small>${esc(q.hint)}</small></div></div>`).join("");
+}
+$("questCard").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-q]"); if (!b) return;
+  const q = quest.quests[Number(b.dataset.q)]; q.done = !q.done; ls.set("quest", quest); renderQuest();
+  if (quest.quests.every((x) => x.done)) toast("Quest complete! 🌿");
+});
+$("newQuest").addEventListener("click", () => loadQuest(true));
+
+// ---------- Snap → identify (queued when there's no signal) ----------
+$("shoot").addEventListener("click", () => $("cam").click());
+$("pick").addEventListener("click", () => $("gallery").click());
+for (const id of ["cam", "gallery"]) $(id).addEventListener("change", async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) await addFind(f); });
+
+async function shrink(file, max = 1024, q = 0.82) {
+  const img = await createImageBitmap(file);
+  const s = Math.min(1, max / Math.max(img.width, img.height));
+  const c = document.createElement("canvas"); c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+  c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+  return c.toDataURL("image/jpeg", q);
+}
+async function addFind(file) {
+  const photo = await shrink(file), thumb = await shrink(file, 360, 0.75);
+  const pos = await getPos();
+  const f = { id: `f${Date.now()}`, createdAt: Date.now(), photo, thumb, pos, status: "queued", region: region(), month: month() };
+  await putFind(f);
+  if (walk) { walk.finds.push(f.id); saveWalk(); renderWalk(); }
+  showFind(f);
+  if (navigator.onLine) await identify(f); else { toast("No signal. Saved; Wayside will name it when you're back in range."); renderLists(); }
+}
+let identifying = false;
+async function identify(f) {
+  f.status = "working"; await putFind(f); renderLists(); if (openId === f.id) showFind(f);
+  try {
+    const r = await fetch("/api/identify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: f.photo, region: f.region, month: f.month }) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error);
+    f.result = j; f.status = "done";
+    autoTickQuest(j);
+    // A short buzz so the phone can stay in the pocket while Gemma works.
+    try { navigator.vibrate?.([80, 60, 80]); } catch {}
+    if (openId !== f.id && j.common_name) toast(`Found: ${j.common_name}`);
+  } catch (e) { f.status = navigator.onLine ? "error" : "queued"; f.error = e.message; }
+  await putFind(f); renderLists(); if (openId === f.id) showFind(f);
+}
+async function processQueue() {
+  if (identifying) return;
+  identifying = true;
+  try { for (const f of (await allFinds()).filter((x) => x.status === "queued" || x.status === "error").reverse()) { if (!navigator.onLine) break; await identify(f); } }
+  finally { identifying = false; }
+}
+function autoTickQuest(r) {
+  if (!quest || !r?.common_name) return;
+  const name = r.common_name.toLowerCase();
+  const hit = quest.quests.find((q) => !q.done && (name.split(/\s+/).some((w) => w.length > 3 && q.find.toLowerCase().includes(w))));
+  if (hit) { hit.done = true; ls.set("quest", quest); renderQuest(); toast(`Quest ticked: ${hit.find}`); }
+}
+
+// ---------- Find detail ----------
+// Local names: shown only when Gemma is very sure. Otherwise the walker asks someone nearby
+// and saves the name they are told, which beats any model on village-level names.
+const SURE = 0.85;
+const localName = (f) => f.askedName ? { name: f.askedName, by: "told by someone nearby" } : f.result?.local_name && (f.result.local_name_confidence ?? 0) >= SURE ? { name: f.result.local_name, by: "Gemma" } : null;
+let openId = null;
+function showFind(f) {
+  openId = f.id;
+  const r = f.result;
+  const when = new Date(f.createdAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  let body = `<img class="photo" src="${f.photo}" alt="Your photo">`;
+  if (f.status === "queued") body += `<div class="box nextq"><b>Saved, waiting for signal.</b><br><span class="muted">Wayside will identify it automatically when you're back online. Meanwhile, look closely: leaf shape, smell, sound, who visits it.</span></div>`;
+  else if (f.status === "working") body += `<div class="thinking"><span class="spin"></span><span>Gemma is looking at your photo. <b>Keep walking</b>; your phone will buzz when it knows.</span></div>`;
+  else if (f.status === "error") body += `<div class="block" style="background:var(--clay-soft)"><b>Couldn't identify it yet.</b><br><span class="muted">${esc(f.error || "")}</span><br><button class="btn sm" type="button" data-retry="${f.id}" style="margin-top:8px">Try again</button></div>`;
+  else if (r) {
+    const conf = Math.round((r.confidence ?? 0) * 100);
+    const safety = r.safety || {};
+    const ln = localName(f), lang = r.local_language || "the local language";
+    body += `<div class="names"><h2>${esc(r.common_name || (r.subject === "none" ? "Nothing clear in this photo" : "Unknown"))}</h2>${ln ? `<div class="kn">${esc(ln.name)} <span class="muted" style="font-family:var(--font);font-weight:600">· ${esc(ln.by)}</span></div>` : ""}${r.scientific_name ? `<i>${esc(r.scientific_name)}</i>` : ""}</div>`;
+    if (!ln && r.subject !== "none") body += `<div class="box" style="border:1.5px dashed var(--sun);background:var(--sun-soft)"><h4>What do people here call it?</h4><span>Local names change from village to village${r.local_name ? `, and Gemma isn't sure (it guessed <span style="font-family:var(--kn)">${esc(r.local_name)}</span>)` : ""}. Ask someone nearby what they call it in ${esc(lang)}, and save it.</span><div style="display:flex;gap:8px;margin-top:10px"><input id="askName" placeholder="Name they told you" style="flex:1;min-width:0;border:1.5px solid var(--line);border-radius:12px;padding:10px 12px;background:#fff"><button class="btn sm leaf" type="button" data-askfor="${f.id}">Save</button></div></div>`;
+    body += `
+      <div class="pills"><span class="pill ${conf >= 75 ? "good" : conf >= 50 ? "warn" : "bad"}">${conf}% sure</span>${r.subject && r.subject !== "none" ? `<span class="pill">${esc(r.subject)}</span>` : ""}<span class="pill">${esc(when)}</span></div>
+      ${(r.alternatives || []).length ? `<p class="muted" style="margin:8px 2px 0">Could also be: ${r.alternatives.map(esc).join(", ")}</p>` : ""}
+      ${(r.look_closer || []).length ? `<div class="box look"><h4>Look up from the screen</h4>${r.look_closer.map((x) => `<label><input type="checkbox"><span>${esc(x)}</span></label>`).join("")}</div>` : ""}
+      ${r.did_you_know ? `<div class="box dyk"><h4>Did you know</h4>${esc(r.did_you_know)}</div>` : ""}
+      ${safety.note ? `<div class="box safe"><span class="pill ${safety.level === "danger" ? "bad" : safety.level === "caution" ? "warn" : "good"}" style="height:fit-content">${esc(safety.level || "note")}</span><span>${esc(safety.note)}</span></div>` : ""}
+      ${r.next_quest ? `<div class="box nextq"><h4>Next, look for</h4><b>${esc(r.next_quest)}</b></div>` : ""}
+      <p class="muted" style="margin:12px 2px 0">Identified by ${esc(r.model || "Gemma")} in ${((r.ms || 0) / 1000).toFixed(0)} s. Always double-check before touching or eating anything wild.</p>`;
+  }
+  body += `<button class="btn leaf block" type="button" data-close style="margin-top:14px">Back to the walk</button>`;
+  openSheet(body);
+}
+$("sheet").addEventListener("click", async (e) => {
+  if (e.target.closest("[data-close]")) return closeSheet();
+  const ask = e.target.closest("[data-askfor]");
+  if (ask) {
+    const name = $("askName")?.value.trim();
+    if (!name) return toast("Type the name you were told");
+    const f = (await allFinds()).find((x) => x.id === ask.dataset.askfor);
+    if (f) { f.askedName = name.slice(0, 60); await putFind(f); renderLists(); showFind(f); toast("Saved. Now you know something Gemma didn't."); }
+    return;
+  }
+  const rt = e.target.closest("[data-retry]");
+  if (rt) { const f = (await allFinds()).find((x) => x.id === rt.dataset.retry); if (f) identify(f); }
+});
+function openSheet(html) { $("sheetBody").innerHTML = html; $("sheet").scrollTop = 0; $("sheet").classList.add("open"); $("scrim").classList.add("open"); }
+function closeSheet() { $("sheet").classList.remove("open"); $("scrim").classList.remove("open"); openId = null; }
+$("scrim").addEventListener("click", closeSheet);
+
+// ---------- Lists, journal, map ----------
+function findTile(f) {
+  const r = f.result;
+  const badge = f.status === "queued" ? "Waiting for signal" : f.status === "working" ? "Identifying…" : f.status === "error" ? "Tap to retry" : r?.subject && r.subject !== "none" ? r.subject : "";
+  return `<button class="find" type="button" data-find="${f.id}"><img src="${f.thumb}" alt="">${badge ? `<span class="badge">${esc(badge)}</span>` : ""}<div class="t"><b>${esc(r?.common_name || (f.status === "done" ? "Unknown" : "New find"))}</b>${localName(f) ? `<div class="kn">${esc(localName(f).name)}</div>` : ""}<small>${new Date(f.createdAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</small></div></button>`;
+}
+async function renderLists() {
+  const finds = await allFinds();
+  $("recent").innerHTML = finds.length ? finds.slice(0, 4).map(findTile).join("") : `<div class="empty" style="grid-column:1/-1">Nothing yet. Tap <b>Spot something</b> when a plant, bird or bug catches your eye.</div>`;
+  $("journal").innerHTML = finds.length ? finds.map(findTile).join("") : `<div class="empty" style="grid-column:1/-1">Your finds will appear here.</div>`;
+  const named = finds.filter((f) => f.result?.common_name);
+  $("journalSub").textContent = `${finds.length} finds, ${new Set(named.map((f) => f.result.common_name)).size} different species. Saved on this phone.`;
+  if (map) drawMap(finds);
+}
+document.addEventListener("click", async (e) => {
+  const t = e.target.closest("[data-find]");
+  if (t) { const f = (await allFinds()).find((x) => x.id === t.dataset.find); if (f) { if (f.status === "error" && navigator.onLine) identify(f); showFind(f); } }
+  const g = e.target.closest("[data-goto]");
+  if (g) setTab(g.dataset.goto);
+});
+let map = null, layer = null;
+function drawMap(finds) {
+  layer?.remove(); layer = L.layerGroup().addTo(map);
+  const bounds = [];
+  for (const w of [...ls.get("walks", []), ...(walk ? [walk] : [])]) if (w.track.length > 1) { L.polyline(w.track, { color: "#1f7a4d", weight: 4, opacity: .8 }).addTo(layer); bounds.push(...w.track); }
+  for (const f of finds.filter((x) => x.pos)) {
+    const ll = [f.pos.lat, f.pos.lon]; bounds.push(ll);
+    L.circleMarker(ll, { radius: 8, color: "#fff", weight: 2, fillColor: "#c4502a", fillOpacity: 1 }).addTo(layer)
+      .bindPopup(`<img src="${f.thumb}" alt=""><b>${esc(f.result?.common_name || "New find")}</b>${localName(f) ? `<br><span style="font-family:var(--kn);color:#1f7a4d">${esc(localName(f).name)}</span>` : ""}`);
+  }
+  if (bounds.length) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 17 });
+}
+async function ensureMap() {
+  if (map || typeof L === "undefined") return;
+  map = L.map("map", { zoomControl: true });
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map);
+  map.setView([12.97, 77.59], 12);
+  const p = await getPos(); if (p) map.setView([p.lat, p.lon], 16);
+  drawMap(await allFinds());
+}
+function setTab(t) {
+  document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === t));
+  document.querySelectorAll("[data-view]").forEach((s) => s.classList.toggle("hidden", s.dataset.view !== t));
+  if (t === "map") ensureMap().then(() => setTimeout(() => map?.invalidateSize(), 50));
+}
+$("tabs").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) setTab(b.dataset.tab); });
+
+// ---------- Settings ----------
+$("settingsBtn").addEventListener("click", () => {
+  openSheet(`<h2 style="margin:6px 0 12px;font-size:22px">Settings</h2>
+    <label class="field"><span>Your region</span><input id="regionIn" value="${esc(region())}" placeholder="e.g. Karnataka, India"></label>
+    <p class="muted" style="margin-top:-6px">Used for local names (Kannada in Karnataka) and seasonal quests. Your exact location never leaves the phone.</p>
+    <button class="btn block" type="button" id="saveSettings">Save</button>`);
+  $("saveSettings").onclick = () => { ls.set("region", $("regionIn").value.trim() || "Karnataka, India"); closeSheet(); loadQuest(true); toast("Saved"); };
+});
+
+// ---------- Start ----------
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+updateNet(); renderWalk(); renderLists(); loadQuest();
+if (walk) { startTracking(); tick = setInterval(renderWalk, 1000); }
+</script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "name": "wayside",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A pocket field guide for walks: snap a plant, bird or insect and Gemma names it in English and your local language.",
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=22" },
+  "scripts": { "start": "node src/server.mjs" }
+}
